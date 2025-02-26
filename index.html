@@ -159,10 +159,10 @@
         const restartButton = document.getElementById('restart-button');
         const finalScore = document.getElementById('final-score');
         
-        // Colors for bubbles
+        // Colors for bubbles - brighter, more eye-catching colors
         const bubbleColors = [
-            '#ff6b6b', '#4ecdc4', '#ffe66d', '#a29bfe', 
-            '#51cf66', '#ff9f43', '#74b9ff'
+            '#ff3a3a', '#00e5ff', '#ffdd00', '#9d65ff', 
+            '#38ff6a', '#ff8400', '#00a8ff'
         ];
         
         // Initialize
@@ -233,11 +233,11 @@
             const width = containerRect.width;
             const height = containerRect.height;
             
-            // Size and points (smaller = more points)
-            const minSize = 30;
-            const maxSize = 80;
+            // Size and points (smaller = more points) - wider range of sizes and higher point values
+            const minSize = 25;
+            const maxSize = 85;
             const size = minSize + Math.random() * (maxSize - minSize);
-            const points = Math.ceil((maxSize - size) / 5);
+            const points = Math.ceil((maxSize - size) / 3); // More points per bubble
             
             // Position (keep away from edges)
             const margin = size / 2;
@@ -279,30 +279,54 @@
             });
         }
         
-        // Pop a bubble
+        // Pop a bubble with visual and audio feedback
         function popBubble(bubbleElement, points) {
+            // Add simple audio feedback
+            try {
+                const audio = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audio.createOscillator();
+                const gainNode = audio.createGain();
+                
+                // Higher pitch for smaller bubbles (worth more points)
+                oscillator.type = 'sine';
+                oscillator.frequency.value = 200 + (points * 50);
+                gainNode.gain.value = 0.1;
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audio.destination);
+                
+                oscillator.start();
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.3);
+                setTimeout(() => oscillator.stop(), 300);
+            } catch(e) {
+                // Fallback if audio context isn't available
+            }
             if (!gameActive) return;
             
             // Find bubble in array
             const index = bubbles.findIndex(b => b.element === bubbleElement);
             if (index === -1) return;
             
-            // Check for combo
+            // Check for combo - longer window for combos
             const now = Date.now();
-            if (now - lastPopTime < 1000) {
+            if (now - lastPopTime < 1500) { // Increased from 1000ms to 1500ms for easier combos
                 comboCount++;
                 comboDisplay.textContent = `Combo x${comboCount + 1}!`;
                 comboDisplay.style.opacity = '1';
+                comboDisplay.style.fontSize = `${18 + (comboCount * 2)}px`; // Grows with combo
+                comboDisplay.style.color = bubbleColors[comboCount % bubbleColors.length]; // Changes color
                 
                 clearTimeout(comboTimer);
             } else {
                 comboCount = 0;
                 comboDisplay.style.opacity = '0';
+                comboDisplay.style.fontSize = '18px';
             }
             
-            // Calculate points with combo
+            // Calculate points with combo - exponential multiplier for higher combos
             const comboMultiplier = comboCount + 1;
-            const earnedPoints = points * comboMultiplier;
+            // Exponential scoring for higher combos makes big combos VERY rewarding
+            const earnedPoints = points * (comboMultiplier * comboMultiplier);
             
             // Update score
             score += earnedPoints;
@@ -319,7 +343,8 @@
             comboTimer = setTimeout(() => {
                 comboCount = 0;
                 comboDisplay.style.opacity = '0';
-            }, 1000);
+                comboDisplay.style.fontSize = '18px';
+            }, 1500); // Increased to match the combo window
             
             // Pop animation
             bubbleElement.style.transform = 'translate(-50%, -50%) scale(1.5)';
@@ -391,8 +416,52 @@
             gameActive = false;
             clearInterval(countdownInterval);
             
-            finalScore.textContent = score;
+            // Show "New High Score!" if achieved
+            if (score > highScore - 1) { // -1 to account for current game
+                finalScore.innerHTML = `${score} <span style="color:#ffdd00;font-weight:bold;">NEW HIGH SCORE!</span>`;
+                
+                // Add a little celebration animation
+                setTimeout(() => {
+                    for (let i = 0; i < 20; i++) {
+                        const particle = document.createElement('div');
+                        particle.style.position = 'absolute';
+                        particle.style.width = '8px';
+                        particle.style.height = '8px';
+                        particle.style.borderRadius = '50%';
+                        particle.style.backgroundColor = bubbleColors[i % bubbleColors.length];
+                        particle.style.left = '50%';
+                        particle.style.top = '50%';
+                        gameOverScreen.appendChild(particle);
+                        
+                        // Animate the particle
+                        const angle = Math.random() * Math.PI * 2;
+                        const distance = 50 + Math.random() * 100;
+                        const destX = distance * Math.cos(angle);
+                        const destY = distance * Math.sin(angle);
+                        
+                        particle.animate([
+                            { transform: 'translate(-50%, -50%)' },
+                            { transform: `translate(calc(-50% + ${destX}px), calc(-50% + ${destY}px))`, opacity: 0 }
+                        ], {
+                            duration: 1000,
+                            easing: 'ease-out',
+                            fill: 'forwards'
+                        });
+                    }
+                }, 300);
+            } else {
+                finalScore.textContent = score;
+            }
+            
             gameOverScreen.style.display = 'flex';
+            
+            // Show "Almost beat your high score!" message if within 10% of high score
+            if (score > highScore * 0.9 && score < highScore) {
+                const nearMissMsg = document.createElement('p');
+                nearMissMsg.textContent = "So close to your high score! One more try?";
+                nearMissMsg.style.color = "#ff8400";
+                gameOverScreen.insertBefore(nearMissMsg, document.getElementById('restart-button'));
+            }
         }
         
         // Start animation loop
